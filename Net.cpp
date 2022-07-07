@@ -9,9 +9,8 @@ NeuralNetImpl::NeuralNetImpl(int input_size, int hidden_size, int num_classes)
 }
 
 torch::Tensor NeuralNetImpl::forward(torch::Tensor x) {
-    x = torch::nn::functional::relu(fc1(x));
-    x = torch::nn::functional::relu(fc2(x));
-    x = torch::nn::functional::relu(fc3(x));
+    x = torch::nn::functional::relu(fc1->forward(x));
+    x = torch::nn::functional::relu(fc2->forward(x));
 
-    return x;
+    return fc3->forward(x);
 }

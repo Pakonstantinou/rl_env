@@ -76,8 +76,8 @@ public:
         this->actor = NeuralNet(input_dims, layer1_size, n_actions);
         this->actor->to(device);
 
-       critic = NeuralNet(input_dims, layer1_size, 1);
-       critic->to(device);
+        critic = NeuralNet(input_dims, layer1_size, 1);
+        critic->to(device);
 
         // Optimizer
         actor_optimizer = new torch::optim::Adam(actor->parameters(), torch::optim::AdamOptions(alpha));
@@ -86,24 +86,36 @@ public:
 
     float choose_action(float observation){
         torch::Tensor logsigma;
-        torch::Tensor output = actor->forward(torch::tensor(observation));
-        torch::Tensor mu = output[0];
-        logsigma = output[1]; //add exp of sigma
+        //std::cout<<observation<<std::endl;
+        torch::Tensor test = torch::full({1, 1}, /*value=*/observation);
+        //std::cout<<test<<std::endl;
+        torch::Tensor tensor = torch::ones(5);
+        torch::Tensor output = actor->forward(test);
+        //std::cout<<output;
+
+
+        torch::Tensor mu = output[0][0];
+        logsigma = output[0][1]; //add exp of sigma
+        //std::cout<<mu<<logsigma<<std::endl;
         torch::Tensor sigma = torch::exp(logsigma);
+        //std::cout<<logsigma<<sigma<<std::endl;
 
         std::normal_distribution<float> distribution(mu.item<float>(), sigma.item<float>());
 
         // auto sampler1 = torch::randn({1}) * sigma + mu ;
         // auto pdf = (1.0 / (sigma * std::sqrt(2.0 * M_PI))) * torch::exp(-0.5 * torch::pow((sampler1 - mu) / sigma, 2));
         // this->log_probs = torch::log(pdf);
+        auto sample = torch::randn({1})*sigma + mu;
 
         // float action = tanh(sampler1.item<float>());
-
+        auto pdf = (1.0 / (sigma * std::sqrt(2*M_PI))) * torch::exp(-0.5 * torch::pow((sample.detach() - mu) / sigma, 2));
         auto probs = distribution(generator);
+        //std::cout<<"pdf"<<pdf<<std::endl;
+        this->log_probs = torch::log(pdf);
+        //this->log_probs = torch::log(torch::tensor(probs));
+        //std::cout<<probs<<log_probs<<std::endl;
 
-        this->log_probs = torch::log(torch::tensor(probs));
-
-        float action = tanh(probs);
+        float action = tanh(sample.item<float>());
 
         return action * 5;
     }
@@ -112,14 +124,15 @@ public:
         this->actor_optimizer->zero_grad();
         this->critic_optimizer->zero_grad();
 
-        torch::Tensor critic_value_ = this->critic->forward(torch::tensor(new_state));
-        torch::Tensor critic_value = this->critic->forward(torch::tensor(state));
+        torch::Tensor critic_value_ = this->critic->forward(torch::full({1,1}, new_state));
+        torch::Tensor critic_value = this->critic->forward(torch::full({1,1},state));
 
         torch::Tensor tensor_reward = torch::tensor(reward);
-        torch::Tensor delta = tensor_reward + this->gamma*critic_value_ * (1 * int(done)) - critic_value;
+        torch::Tensor delta = tensor_reward + this->gamma*critic_value_ * (1 * int(!done)) - critic_value;
 
         auto actor_loss = -1 * this->log_probs * delta;
-        auto critic_loss = pow(delta, 2);
+        auto critic_loss = torch::pow(delta, 2);
+        //std::cout<<log_probs<<std::endl<<delta<<std::endl;
 
         (actor_loss + critic_loss).backward();
         this->actor_optimizer->step();
@@ -141,9 +154,9 @@ int main() {
 
     CustomEnv env;
 
-    Agent *agent = new Agent(0.000005, 0.00001, 1);
+    Agent *agent = new Agent(0.0000005, 0.000001, 1);
 
-    int num_episodes = 1500;
+    int num_episodes = 800000;
     bool done;
     float score;
     float observation, observation_, reward, action;
